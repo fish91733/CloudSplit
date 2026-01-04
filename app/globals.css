@@ -1,0 +1,139 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 15, 23, 42; /* slate-900 */
+  --background-rgb: 248, 250, 252; /* slate-50 */
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: rgb(var(--background-rgb));
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;  /* Chrome, Safari and Opera */
+  }
+
+  /* Financial Typography - Tabular Numbers for Currency */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+
+  /* Currency Display */
+  .currency {
+    @apply tabular-nums font-semibold;
+  }
+}
+
+@keyframes fade-slide-up {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes subtle-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.15);
+  }
+  70% {
+    transform: scale(1.01);
+    box-shadow: 0 10px 30px rgba(37, 99, 235, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+@layer components {
+  .motion-shell {
+    @apply relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.08)];
+    animation: fade-slide-up 0.6s ease forwards;
+  }
+
+  .motion-shell::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, rgba(59,130,246,0.12), rgba(16,185,129,0.12));
+    opacity: 0;
+    transform: skewX(-12deg);
+    animation: shimmer 4s linear infinite;
+  pointer-events: none;
+  }
+
+  .motion-card {
+    @apply relative overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition duration-500 ease-[cubic-bezier(.16,1,.3,1)];
+  }
+
+  .motion-card::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    background: linear-gradient(120deg, rgba(59,130,246,0.35), rgba(16,185,129,0.35));
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    z-index: 0;
+  }
+
+  .motion-card > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .motion-card:hover {
+    transform: translateY(-6px);
+  }
+
+  .motion-card:hover::before {
+    opacity: 0.35;
+  }
+
+  .motion-card--pulse {
+    animation: subtle-pulse 3.6s ease-in-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-shell,
+  .motion-card,
+  .motion-card--pulse {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
