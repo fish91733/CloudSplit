@@ -92,8 +92,11 @@ export default function PaymentSummary() {
       }
 
       // 獲取所有相關的 bill_item_id 和 participant_id
-      const itemIds = [...new Set(splitDetails.map((s) => s.bill_item_id))].filter(Boolean)
-      const participantIds = [...new Set(splitDetails.map((s) => s.participant_id))].filter(Boolean)
+      // 過濾掉 null、undefined 和空字串
+      const itemIds = [...new Set(splitDetails.map((s) => s.bill_item_id))]
+        .filter((id): id is string => Boolean(id) && typeof id === 'string' && id.trim().length > 0)
+      const participantIds = [...new Set(splitDetails.map((s) => s.participant_id))]
+        .filter((id): id is string => Boolean(id) && typeof id === 'string' && id.trim().length > 0)
 
       // 如果沒有有效的 ID，直接返回
       if (itemIds.length === 0 || participantIds.length === 0) {
@@ -105,23 +108,29 @@ export default function PaymentSummary() {
 
       // 並行查詢品項和參與者
       const [itemsResult, participantsResult] = await Promise.all([
-        supabase
-          .from('bill_items')
-          .select('id, item_name, bill_id')
-          .in('id', itemIds),
-        supabase
-          .from('bill_participants')
-          .select('id, name')
-          .in('id', participantIds),
+        itemIds.length > 0
+          ? supabase
+              .from('bill_items')
+              .select('id, item_name, bill_id')
+              .in('id', itemIds)
+          : { data: [], error: null },
+        participantIds.length > 0
+          ? supabase
+              .from('bill_participants')
+              .select('id, name')
+              .in('id', participantIds)
+          : { data: [], error: null },
       ])
 
       if (itemsResult.error) {
         console.error('Bill items query error:', itemsResult.error)
-        throw new Error(`查詢品項失敗：${itemsResult.error.message || '未知錯誤'}`)
+        const errorMessage = itemsResult.error.message || itemsResult.error.code || '未知錯誤'
+        throw new Error(`查詢品項失敗：${errorMessage}`)
       }
       if (participantsResult.error) {
         console.error('Participants query error:', participantsResult.error)
-        throw new Error(`查詢參與者失敗：${participantsResult.error.message || '未知錯誤'}`)
+        const errorMessage = participantsResult.error.message || participantsResult.error.code || '未知錯誤'
+        throw new Error(`查詢參與者失敗：${errorMessage}`)
       }
 
       // 等待 itemsResult 完成後再查詢 bills
