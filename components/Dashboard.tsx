@@ -113,7 +113,7 @@ export default function Dashboard() {
         // 構建查詢（只選擇需要的欄位）
         let query = supabase
           .from('bills')
-          .select('id, title, bill_date, total_amount, checked, created_by')
+          .select('id, title, bill_date, total_amount, checked, created_by, created_at')
           .order('bill_date', { ascending: false })
 
         if (user) {
