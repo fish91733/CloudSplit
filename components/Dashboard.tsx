@@ -184,7 +184,7 @@ export default function Dashboard() {
       // 只選擇需要的欄位以減少資料傳輸
       let query = supabase
         .from('bills')
-        .select('id, title, bill_date, total_amount, checked, created_by, image_url')
+        .select('id, title, bill_date, total_amount, checked, created_by, created_at, image_url')
         .order('bill_date', { ascending: false })
 
       if (user) {
