@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 export default function AuthPage() {
-  const [isLogin, setIsLogin] = useState(true)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -39,55 +38,27 @@ export default function AuthPage() {
     try {
       const email = usernameToEmail(username)
 
-      if (isLogin) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
-        if (error) {
-          // 提供更詳細的錯誤訊息
-          if (error.message.includes('Invalid login credentials')) {
-            throw new Error('帳號或密碼錯誤，請檢查輸入是否正確')
-          } else if (error.message.includes('Email not confirmed')) {
-            throw new Error('帳號尚未確認，請先在 Supabase Dashboard 中確認帳號，或禁用 Email 確認功能')
-          } else {
-            throw error
-          }
-        }
-        // 確認登入成功
-        if (data.session) {
-          router.push('/')
-          router.refresh()
+      // 只允許登入，不允許註冊
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+      if (error) {
+        // 提供更詳細的錯誤訊息
+        if (error.message.includes('Invalid login credentials')) {
+          throw new Error('帳號或密碼錯誤，請檢查輸入是否正確')
+        } else if (error.message.includes('Email not confirmed')) {
+          throw new Error('帳號尚未確認，請先在 Supabase Dashboard 中確認帳號，或禁用 Email 確認功能')
         } else {
-          throw new Error('登入失敗，請稍後再試')
+          throw error
         }
+      }
+      // 確認登入成功
+      if (data.session) {
+        router.push('/')
+        router.refresh()
       } else {
-        // 註冊
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: username, // 使用帳號名稱作為顯示名稱
-            },
-          },
-        })
-        if (error) throw error
-
-        // 如果註冊成功且有session，直接登入
-        if (data.session) {
-          router.push('/')
-          router.refresh()
-        } else {
-          // 如果Supabase需要Email確認，但我們使用的是虛擬email (@cloudsplit.com)
-          // 這種情況下無法收到確認email，所以需要使用管理員API來確認用戶
-          // 或者提示用戶在Supabase Dashboard中手動確認
-          // 臨時解決方案：提示用戶檢查Supabase設定
-          setError('註冊成功，但需要確認Email。由於使用的是系統帳號，請聯繫管理員啟用帳號，或在Supabase Dashboard中禁用Email確認功能。')
-          setIsLogin(true)
-          // 保留帳號，方便用戶直接登入
-          setPassword('')
-        }
+        throw new Error('登入失敗，請稍後再試')
       }
     } catch (error: any) {
       setError(error.message)
@@ -104,27 +75,8 @@ export default function AuthPage() {
         </h1>
         <p className="text-center text-gray-600 mb-8">雲端多人分帳系統</p>
 
-        <div className="flex gap-4 mb-6">
-          <button
-            onClick={() => setIsLogin(true)}
-            className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-              isLogin
-                ? 'bg-primary-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            登入
-          </button>
-          <button
-            onClick={() => setIsLogin(false)}
-            className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-              !isLogin
-                ? 'bg-primary-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            註冊
-          </button>
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold text-center text-gray-800">登入</h2>
         </div>
 
         <form onSubmit={handleAuth} className="space-y-4">
@@ -170,7 +122,7 @@ export default function AuthPage() {
             disabled={loading}
             className="w-full bg-primary-600 text-white py-3 rounded-lg font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? '處理中...' : isLogin ? '登入' : '註冊'}
+            {loading ? '處理中...' : '登入'}
           </button>
         </form>
 
