@@ -1206,9 +1206,127 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
 
           {/* Items Summary Table */}
           {items.length > 0 && (
-            <div className={`${isModal ? 'bg-transparent border border-gray-200' : 'bg-white rounded-lg shadow'} p-6`}>
+            <div className={`${isModal ? 'bg-transparent border border-gray-200' : 'bg-white rounded-lg shadow'} p-4 sm:p-6`}>
               <h2 className="text-lg font-semibold mb-4">品項明細總覽</h2>
-              <div className="overflow-x-auto">
+              
+              {/* 手機版：卡片布局 */}
+              <div className="block md:hidden space-y-3">
+                {items.map((item) => {
+                  const shareCount = item.participantIds.length
+                  const shareAmount = shareCount > 0
+                    ? calculateShareAmount(
+                        item.unit_price,
+                        shareCount,
+                        item.discount_ratio,
+                        item.discount_adjustment
+                      )
+                    : 0
+                  const itemTotal = item.unit_price * item.discount_ratio + item.discount_adjustment
+                  const discountAmount = item.unit_price * (1 - item.discount_ratio)
+                  const participantNames = item.participantIds
+                    .map((pid) => participants.find((p) => p.id === pid)?.name)
+                    .filter(Boolean)
+                    .join(', ')
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2"
+                    >
+                      <div className="flex items-start justify-between">
+                        <button
+                          onClick={() => {
+                            const element = document.getElementById(`item-${item.id}`)
+                            if (element) {
+                              element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                              element.classList.add('ring-4', 'ring-blue-400', 'ring-opacity-50')
+                              setTimeout(() => {
+                                element.classList.remove('ring-4', 'ring-blue-400', 'ring-opacity-50')
+                              }, 2000)
+                            }
+                          }}
+                          className="text-blue-600 hover:text-blue-800 hover:underline text-left font-medium text-sm flex-1"
+                        >
+                          {item.item_name || <span className="text-gray-400">未命名品項</span>}
+                        </button>
+                        <div className="text-right">
+                          <div className="text-sm font-semibold text-primary-600">
+                            {formatCurrency(itemTotal)}
+                          </div>
+                          <div className="text-xs text-gray-500">小計</div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <span className="text-gray-500">單價：</span>
+                          <span className="text-gray-700 ml-1">{formatCurrency(item.unit_price)}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">折扣比：</span>
+                          <span className="text-gray-700 ml-1">{item.discount_ratio.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">折扣金額：</span>
+                          {discountAmount > 0 ? (
+                            <span className="text-red-600 ml-1">-{formatCurrency(discountAmount)}</span>
+                          ) : (
+                            <span className="text-gray-400 ml-1">-</span>
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-gray-500">折扣調整：</span>
+                          {item.discount_adjustment !== 0 ? (
+                            item.discount_adjustment > 0 ? (
+                              <span className="text-green-600 ml-1">+{formatCurrency(item.discount_adjustment)}</span>
+                            ) : (
+                              <span className="text-red-600 ml-1">{formatCurrency(item.discount_adjustment)}</span>
+                            )
+                          ) : (
+                            <span className="text-gray-400 ml-1">-</span>
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-gray-500">分擔人：</span>
+                          <span className="text-gray-700 ml-1">{participantNames || '無'}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">每人分擔：</span>
+                          <span className="text-gray-700 font-medium ml-1">
+                            {shareCount > 0 ? formatCurrency(shareAmount) : '-'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+                
+                {/* 手機版總計 */}
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2 mt-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">折扣金額合計：</span>
+                    <span className="text-sm text-red-600 font-medium">
+                      -{formatCurrency(
+                        items.reduce((sum, item) => {
+                          return sum + item.unit_price * (1 - item.discount_ratio)
+                        }, 0)
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center border-t border-gray-300 pt-2">
+                    <span className="text-base font-semibold text-gray-700">總計：</span>
+                    <span className="text-lg font-bold text-primary-600">
+                      {formatCurrency(
+                        items.reduce((sum, item) => {
+                          return sum + (item.unit_price * item.discount_ratio + item.discount_adjustment)
+                        }, 0)
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 桌面版：表格布局 */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-200">
@@ -1234,7 +1352,6 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
                           )
                         : 0
                       const itemTotal = item.unit_price * item.discount_ratio + item.discount_adjustment
-                      // 折扣金額 = 單價 * (1 - 折扣比)
                       const discountAmount = item.unit_price * (1 - item.discount_ratio)
                       const participantNames = item.participantIds
                         .map((pid) => participants.find((p) => p.id === pid)?.name)
@@ -1252,7 +1369,6 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
                                 const element = document.getElementById(`item-${item.id}`)
                                 if (element) {
                                   element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                                  // 添加高亮效果
                                   element.classList.add('ring-4', 'ring-blue-400', 'ring-opacity-50')
                                   setTimeout(() => {
                                     element.classList.remove('ring-4', 'ring-blue-400', 'ring-opacity-50')
