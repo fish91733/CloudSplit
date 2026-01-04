@@ -278,6 +278,7 @@ export default function PaymentSummary() {
   }, [])
 
   const persistPaidAmount = useCallback(async (name: string, amount: number) => {
+    if (!user) return // 訪客模式不允許儲存
     if (!name || isNaN(amount)) return
     try {
       const { error } = await supabase
@@ -296,7 +297,7 @@ export default function PaymentSummary() {
     } catch (err) {
       console.error('儲存已繳金額失敗：', err)
     }
-  }, [])
+  }, [user])
 
   useEffect(() => {
     loadPaidAmounts()
@@ -317,17 +318,20 @@ export default function PaymentSummary() {
   }, [summaries])
 
   const handlePaidChange = (name: string, value: string) => {
+    if (!user) return // 訪客模式不允許編輯
     if (!/^\d*(\.\d{0,2})?$/.test(value)) return
     setPaidAmounts((prev) => ({ ...prev, [name]: value }))
   }
 
   const handlePaidBlur = (name: string) => {
+    if (!user) return // 訪客模式不允許編輯
     const parsed = parseFloat(paidAmounts[name] || '0')
     if (isNaN(parsed)) return
     persistPaidAmount(name, parsed)
   }
 
   const handleFillTotal = (name: string, amount: number) => {
+    if (!user) return // 訪客模式不允許編輯
     setPaidAmounts((prev) => ({ ...prev, [name]: amount.toFixed(2) }))
     persistPaidAmount(name, amount)
   }
@@ -522,16 +526,21 @@ export default function PaymentSummary() {
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-xs sm:text-sm font-semibold text-slate-700">已繳金額</span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleFillTotal(summary.participantName, summary.totalAmount)
-                            }}
-                            className="cursor-pointer text-primary-600 hover:text-primary-700 transition-colors text-xs sm:text-sm font-medium px-2 py-1 rounded hover:bg-primary-50"
-                          >
-                            一鍵填滿
-                          </button>
+                          {user && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleFillTotal(summary.participantName, summary.totalAmount)
+                              }}
+                              className="cursor-pointer text-primary-600 hover:text-primary-700 transition-colors text-xs sm:text-sm font-medium px-2 py-1 rounded hover:bg-primary-50"
+                            >
+                              一鍵填滿
+                            </button>
+                          )}
+                          {!user && (
+                            <span className="text-xs text-slate-500 italic">僅供查看</span>
+                          )}
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="relative flex-1">
@@ -541,7 +550,12 @@ export default function PaymentSummary() {
                               inputMode="decimal"
                               value={paidAmounts[summary.participantName] ?? ''}
                               onChange={(e) => handlePaidChange(summary.participantName, e.target.value)}
-                              className="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-7 pr-3 text-sm text-slate-900 tabular-nums focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 transition-colors"
+                              disabled={!user}
+                              className={`w-full rounded-lg border py-2.5 pl-7 pr-3 text-sm tabular-nums transition-colors ${
+                                user
+                                  ? 'border-gray-300 bg-white text-slate-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100'
+                                  : 'border-gray-200 bg-gray-50 text-slate-500 cursor-not-allowed'
+                              }`}
                               placeholder="0.00"
                               onBlur={() => handlePaidBlur(summary.participantName)}
                             />
