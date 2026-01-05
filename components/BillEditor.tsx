@@ -65,6 +65,9 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
   const [imageUrl, setImageUrl] = useState<string | null>(null) // 發票圖片 URL
   const [isImportModalBackdropMouseDown, setIsImportModalBackdropMouseDown] = useState(false)
   const [showBackToTop, setShowBackToTop] = useState(false) // 顯示至頂按鈕
+  // 用於存儲折扣輸入的字符串值，允許輸入過程中的中間狀態（如 "-"）
+  const [discountRatioInputs, setDiscountRatioInputs] = useState<Map<string, string>>(new Map())
+  const [discountAdjustmentInputs, setDiscountAdjustmentInputs] = useState<Map<string, string>>(new Map())
   
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
@@ -382,6 +385,84 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
         item.id === id ? { ...item, [field]: value } : item
       )
     )
+  }
+
+  // 處理折扣比輸入，允許輸入負數
+  const handleDiscountRatioChange = (itemId: string, value: string) => {
+    // 只允許數字、小數點和負號
+    if (value !== '' && !/^-?\d*\.?\d*$/.test(value)) {
+      return // 忽略無效字符
+    }
+    
+    // 允許空字串、負號、負號加數字等中間狀態
+    setDiscountRatioInputs(prev => {
+      const newMap = new Map(prev)
+      newMap.set(itemId, value)
+      return newMap
+    })
+    
+    // 如果輸入是有效的數字，立即更新實際值
+    const numValue = parseFloat(value)
+    if (!isNaN(numValue)) {
+      updateItem(itemId, 'discount_ratio', numValue)
+    }
+  }
+
+  // 處理折扣比輸入失焦，確保值為有效數字
+  const handleDiscountRatioBlur = (itemId: string, currentValue: string) => {
+    const numValue = parseFloat(currentValue)
+    if (isNaN(numValue) || currentValue === '' || currentValue === '-') {
+      // 如果無效，恢復為預設值
+      const item = items.find(i => i.id === itemId)
+      updateItem(itemId, 'discount_ratio', item?.discount_ratio || 1.0)
+    } else {
+      updateItem(itemId, 'discount_ratio', numValue)
+    }
+    // 清除輸入字符串狀態
+    setDiscountRatioInputs(prev => {
+      const newMap = new Map(prev)
+      newMap.delete(itemId)
+      return newMap
+    })
+  }
+
+  // 處理折扣調整輸入，允許輸入負數
+  const handleDiscountAdjustmentChange = (itemId: string, value: string) => {
+    // 只允許數字、小數點和負號
+    if (value !== '' && !/^-?\d*\.?\d*$/.test(value)) {
+      return // 忽略無效字符
+    }
+    
+    // 允許空字串、負號、負號加數字等中間狀態
+    setDiscountAdjustmentInputs(prev => {
+      const newMap = new Map(prev)
+      newMap.set(itemId, value)
+      return newMap
+    })
+    
+    // 如果輸入是有效的數字，立即更新實際值
+    const numValue = parseFloat(value)
+    if (!isNaN(numValue)) {
+      updateItem(itemId, 'discount_adjustment', numValue)
+    }
+  }
+
+  // 處理折扣調整輸入失焦，確保值為有效數字
+  const handleDiscountAdjustmentBlur = (itemId: string, currentValue: string) => {
+    const numValue = parseFloat(currentValue)
+    if (isNaN(numValue) || currentValue === '' || currentValue === '-') {
+      // 如果無效，恢復為預設值
+      const item = items.find(i => i.id === itemId)
+      updateItem(itemId, 'discount_adjustment', item?.discount_adjustment || 0)
+    } else {
+      updateItem(itemId, 'discount_adjustment', numValue)
+    }
+    // 清除輸入字符串狀態
+    setDiscountAdjustmentInputs(prev => {
+      const newMap = new Map(prev)
+      newMap.delete(itemId)
+      return newMap
+    })
   }
 
   const toggleItemParticipant = (itemId: string, participantId: string) => {
@@ -1582,28 +1663,26 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
                         折扣比
                       </label>
                       <input
-                        type="number"
-                        value={item.discount_ratio || 1.0}
-                        onChange={(e) =>
-                          updateItem(
-                            item.id,
-                            'discount_ratio',
-                            parseFloat(e.target.value) || 1.0
-                          )
-                        }
+                        type="text"
+                        value={discountRatioInputs.has(item.id) ? discountRatioInputs.get(item.id)! : (item.discount_ratio || 1.0).toString()}
+                        onChange={(e) => handleDiscountRatioChange(item.id, e.target.value)}
+                        onBlur={(e) => handleDiscountRatioBlur(item.id, e.target.value)}
                         disabled={!canEdit}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="1.0"
-                        min="0"
-                        step="0.01"
                       />
                       {canEdit && (
                         <div className="flex gap-1 mt-1.5">
                           <button
                             type="button"
-                            onClick={() =>
+                            onClick={() => {
+                              setDiscountRatioInputs(prev => {
+                                const newMap = new Map(prev)
+                                newMap.delete(item.id)
+                                return newMap
+                              })
                               updateItem(item.id, 'discount_ratio', 0.9)
-                            }
+                            }}
                             className={`flex-1 px-2 py-1 text-xs font-medium rounded transition-colors ${
                               item.discount_ratio === 0.9
                                 ? 'bg-primary-600 text-white'
@@ -1615,9 +1694,14 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
                           </button>
                           <button
                             type="button"
-                            onClick={() =>
+                            onClick={() => {
+                              setDiscountRatioInputs(prev => {
+                                const newMap = new Map(prev)
+                                newMap.delete(item.id)
+                                return newMap
+                              })
                               updateItem(item.id, 'discount_ratio', 1.0)
-                            }
+                            }}
                             className={`flex-1 px-2 py-1 text-xs font-medium rounded transition-colors ${
                               item.discount_ratio === 1.0
                                 ? 'bg-primary-600 text-white'
@@ -1635,19 +1719,13 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
                         折扣調整
                       </label>
                       <input
-                        type="number"
-                        value={item.discount_adjustment || 0}
-                        onChange={(e) =>
-                          updateItem(
-                            item.id,
-                            'discount_adjustment',
-                            parseFloat(e.target.value) || 0
-                          )
-                        }
+                        type="text"
+                        value={discountAdjustmentInputs.has(item.id) ? discountAdjustmentInputs.get(item.id)! : (item.discount_adjustment || 0).toString()}
+                        onChange={(e) => handleDiscountAdjustmentChange(item.id, e.target.value)}
+                        onBlur={(e) => handleDiscountAdjustmentBlur(item.id, e.target.value)}
                         disabled={!canEdit}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="0"
-                        step="0.01"
                       />
                     </div>
                   </div>
