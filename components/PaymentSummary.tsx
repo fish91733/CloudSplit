@@ -125,7 +125,7 @@ export default function PaymentSummary() {
       })
 
       // 輔助函數：分批查詢以避免陣列過大
-      const batchQuery = async <T>(
+      const batchQuery = async <T extends any>(
         table: string,
         selectFields: string,
         idField: string,
