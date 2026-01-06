@@ -92,66 +92,125 @@ export default function PaymentSummary() {
       }
 
       // 獲取所有相關的 bill_item_id 和 participant_id
-      // 過濾掉 null、undefined 和空字串
+      // 過濾掉 null、undefined 和空字串，並驗證 UUID 格式
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      
       const itemIds = [...new Set(splitDetails.map((s) => s.bill_item_id))]
-        .filter((id): id is string => Boolean(id) && typeof id === 'string' && id.trim().length > 0)
+        .filter((id): id is string => {
+          if (!id || typeof id !== 'string' || id.trim().length === 0) return false
+          // 驗證 UUID 格式
+          return uuidRegex.test(id.trim())
+        })
+      
       const participantIds = [...new Set(splitDetails.map((s) => s.participant_id))]
-        .filter((id): id is string => Boolean(id) && typeof id === 'string' && id.trim().length > 0)
+        .filter((id): id is string => {
+          if (!id || typeof id !== 'string' || id.trim().length === 0) return false
+          // 驗證 UUID 格式
+          return uuidRegex.test(id.trim())
+        })
 
       // 如果沒有有效的 ID，直接返回
       if (itemIds.length === 0 || participantIds.length === 0) {
+        console.log('PaymentSummary: No valid IDs found', { itemIds: itemIds.length, participantIds: participantIds.length })
         setSummaries([])
         setTotalAmount(0)
         setLoading(false)
         return
       }
 
-      // 並行查詢品項和參與者
-      const [itemsResult, participantsResult] = await Promise.all([
-        itemIds.length > 0
-          ? supabase
-              .from('bill_items')
-              .select('id, item_name, bill_id')
-              .in('id', itemIds)
-          : { data: [], error: null },
-        participantIds.length > 0
-          ? supabase
-              .from('bill_participants')
-              .select('id, name')
-              .in('id', participantIds)
-          : { data: [], error: null },
-      ])
+      console.log('PaymentSummary: Querying with valid IDs', { 
+        itemIdsCount: itemIds.length, 
+        participantIdsCount: participantIds.length,
+        itemIdsSample: itemIds.slice(0, 5)
+      })
 
-      if (itemsResult.error) {
-        console.error('Bill items query error:', itemsResult.error)
-        const errorMessage = itemsResult.error.message || itemsResult.error.code || '未知錯誤'
-        throw new Error(`查詢品項失敗：${errorMessage}`)
-      }
-      if (participantsResult.error) {
-        console.error('Participants query error:', participantsResult.error)
-        const errorMessage = participantsResult.error.message || participantsResult.error.code || '未知錯誤'
-        throw new Error(`查詢參與者失敗：${errorMessage}`)
+      // 輔助函數：分批查詢以避免陣列過大
+      const batchQuery = async <T>(
+        table: string,
+        selectFields: string,
+        idField: string,
+        ids: string[],
+        batchSize: number = 100
+      ): Promise<T[]> => {
+        const results: T[] = []
+        for (let i = 0; i < ids.length; i += batchSize) {
+          const batch = ids.slice(i, i + batchSize)
+          const { data, error } = await supabase
+            .from(table)
+            .select(selectFields)
+            .in(idField, batch)
+          
+          if (error) {
+            // 嘗試直接訪問錯誤對象的所有可能屬性
+            const errorInfo = {
+              message: error.message,
+              code: error.code,
+              hint: error.hint,
+              details: error.details,
+              toString: error.toString(),
+              // 嘗試序列化（可能會失敗）
+              raw: error
+            }
+            console.error(`${table} query error (batch ${i / batchSize + 1}):`, errorInfo)
+            throw new Error(`查詢${table}失敗：${error.message || error.code || error.hint || 'Bad Request'}`)
+          }
+          
+          if (data) {
+            results.push(...data as T[])
+          }
+        }
+        return results
       }
 
-      // 等待 itemsResult 完成後再查詢 bills
-      const items = itemsResult.data || []
+      // 並行查詢品項和參與者（使用分批查詢）
+      let items: any[] = []
+      let participants: any[] = []
+      
+      try {
+        const [itemsResult, participantsResult] = await Promise.all([
+          itemIds.length > 0
+            ? batchQuery('bill_items', 'id, item_name, bill_id', 'id', itemIds)
+                .then(data => ({ data, error: null }))
+                .catch(error => ({ data: null, error }))
+            : Promise.resolve({ data: [], error: null }),
+          participantIds.length > 0
+            ? batchQuery('bill_participants', 'id, name', 'id', participantIds)
+                .then(data => ({ data, error: null }))
+                .catch(error => ({ data: null, error }))
+            : Promise.resolve({ data: [], error: null }),
+        ])
+
+        if (itemsResult.error) {
+          throw itemsResult.error
+        }
+        if (participantsResult.error) {
+          throw participantsResult.error
+        }
+
+        items = itemsResult.data || []
+        participants = participantsResult.data || []
+      } catch (error: any) {
+        console.error('Query error caught:', error)
+        // 檢查是否是權限問題
+        const errorMessage = error?.message || String(error) || '未知錯誤'
+        if (errorMessage.includes('permission denied') || errorMessage.includes('row-level security')) {
+          throw new Error('權限不足：請確認已在 Supabase 中執行訪客模式更新腳本')
+        }
+        throw new Error(`查詢失敗：${errorMessage}`)
+      }
+
+      // 查詢 bills（使用分批查詢）
       const billIds = [...new Set(items.map((i: any) => i.bill_id))]
       
       let bills: any[] = []
       if (billIds.length > 0) {
-        const { data: billsData, error: billsError } = await supabase
-          .from('bills')
-          .select('id, title, bill_date')
-          .in('id', billIds)
-
-        if (billsError) {
-          console.error('Bills query error:', billsError)
-          throw new Error(`查詢發票失敗：${billsError.message || '未知錯誤'}`)
+        try {
+          bills = await batchQuery('bills', 'id, title, bill_date', 'id', billIds)
+        } catch (error: any) {
+          console.error('Bills query error:', error)
+          throw new Error(`查詢發票失敗：${error?.message || '未知錯誤'}`)
         }
-        bills = billsData || []
       }
-
-      const participants = participantsResult.data || []
       const billsMap = new Map((bills || []).map((b: any) => [b.id, b]))
       const itemsMap = new Map(items.map((i: any) => [i.id, i]))
       const participantsMap = new Map(participants.map((p: any) => [p.id, p]))

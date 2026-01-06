@@ -5,7 +5,7 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'CloudSplit - 雲端多人分帳系統',
+  title: '還錢好過年',
   description: '記錄發票明細並自動計算多人分擔金額',
 }
 

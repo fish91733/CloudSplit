@@ -75,6 +75,10 @@ export default function BillImageDrawer({
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       await handleUpload(e.target.files[0])
+      // 重置 input value，確保可以重新選擇同一個文件
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
     }
   }
 

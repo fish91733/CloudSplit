@@ -303,7 +303,7 @@ export default function Dashboard() {
         }
       })
       .sort((a, b) => {
-        if (a.year !== b.year) return b.year - a.year // 年份：新到舊
+        if (a.year !== b.year) return a.year - b.year // 年份：舊到新（最小在最左）
         return a.month - b.month // 月份：1~12（左到右）
       })
   }, [bills])
@@ -349,7 +349,7 @@ export default function Dashboard() {
         }
       })
       .sort((a, b) => {
-        if (a.year !== b.year) return b.year - a.year // 年份：新到舊
+        if (a.year !== b.year) return a.year - b.year // 年份：舊到新（最小在最左）
         return a.quarter - b.quarter // 季度：1~4（左到右）
       })
   }, [bills])
@@ -380,7 +380,7 @@ export default function Dashboard() {
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900">CloudSplit</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900">還錢好過年</h1>
             <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto">
               <span className="text-xs sm:text-sm text-slate-600 truncate font-medium">
                 {user
