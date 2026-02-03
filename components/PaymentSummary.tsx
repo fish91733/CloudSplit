@@ -20,14 +20,16 @@ interface PaymentDetail {
   itemName: string
   itemId: string
   shareAmount: number
+  paidAmount: number
 }
 
 interface GroupedDetail {
   billId: string
   billTitle: string
   billDate: string
-  items: { itemName: string; itemId: string; shareAmount: number }[]
+  items: { itemName: string; itemId: string; shareAmount: number; paidAmount: number }[]
   totalAmount: number
+  totalPaid: number
 }
 
 interface Settlement {
@@ -72,7 +74,7 @@ export default function PaymentSummary() {
       // 查詢所有分擔明細
       const { data: splitDetails, error: splitError } = await supabase
         .from('split_details')
-        .select('id, share_amount, participant_id, bill_item_id')
+        .select('id, share_amount, paid_amount, participant_id, bill_item_id')
 
       console.log('PaymentSummary: Split details query completed', {
         hasData: !!splitDetails,
@@ -237,6 +239,7 @@ export default function PaymentSummary() {
         if (!bill) return
 
         const shareAmount = parseFloat(split.share_amount.toString())
+        const paidAmount = parseFloat((split.paid_amount || 0).toString())
         const participantName = participant.name
 
         // 按名稱分組，而不是按 participant_id
@@ -257,6 +260,7 @@ export default function PaymentSummary() {
           itemName: item.item_name,
           itemId: item.id,
           shareAmount,
+          paidAmount,
         })
       })
 
@@ -309,12 +313,14 @@ export default function PaymentSummary() {
         if (!bill) return
 
         const shareAmount = parseFloat(split.share_amount.toString())
+        const paidAmount = parseFloat((split.paid_amount || 0).toString())
+        const netAmount = shareAmount - paidAmount
         const debtor = participant.name
         const creditor = bill.payer
 
-        if (creditor && debtor !== creditor) {
+        if (creditor && debtor !== creditor && netAmount > 0) {
           if (!rawSettlements[debtor]) rawSettlements[debtor] = {}
-          rawSettlements[debtor][creditor] = (rawSettlements[debtor][creditor] || 0) + shareAmount
+          rawSettlements[debtor][creditor] = (rawSettlements[debtor][creditor] || 0) + netAmount
         }
       })
 
@@ -752,6 +758,7 @@ export default function PaymentSummary() {
               billDate: detail.billDate,
               items: [],
               totalAmount: 0,
+              totalPaid: 0,
             })
           }
           const group = groupedDetails.get(detail.billId)!
@@ -759,8 +766,10 @@ export default function PaymentSummary() {
             itemName: detail.itemName,
             itemId: detail.itemId,
             shareAmount: detail.shareAmount,
+            paidAmount: detail.paidAmount,
           })
           group.totalAmount += detail.shareAmount
+          group.totalPaid = (group.totalPaid || 0) + detail.paidAmount
         })
 
         // 轉換為陣列並排序（按日期降序）

@@ -18,6 +18,7 @@ interface BillItem {
   discount_ratio: number
   discount_adjustment: number
   participantIds: string[]
+  participantPaidAmounts: { [participantId: string]: number }
   sort_order: number
 }
 
@@ -25,6 +26,7 @@ interface ParticipantTotal {
   participantId: string
   name: string
   total: number
+  paid: number
 }
 
 interface HistoryState {
@@ -66,13 +68,10 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
   const [imageUrl, setImageUrl] = useState<string | null>(null) // 發票圖片 URL
   const [isImportModalBackdropMouseDown, setIsImportModalBackdropMouseDown] = useState(false)
   const [showBackToTop, setShowBackToTop] = useState(false) // 顯示至頂按鈕
-  // 用於存儲折扣輸入的字符串值，允許輸入過程中的中間狀態（如 "-"）
-  const [isAiLoading, setIsAiLoading] = useState(false)
   const [discountRatioInputs, setDiscountRatioInputs] = useState<Map<string, string>>(new Map())
   const [discountAdjustmentInputs, setDiscountAdjustmentInputs] = useState<Map<string, string>>(new Map())
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (billId) {
@@ -266,15 +265,24 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
       })
 
       // 組合 items 和 splits
-      const itemsWithSplits: BillItem[] = billItems.map((item, index) => ({
-        id: item.id,
-        item_name: item.item_name,
-        unit_price: item.unit_price,
-        discount_ratio: item.discount_ratio,
-        discount_adjustment: item.discount_adjustment,
-        participantIds: splitsMap.get(item.id) || [],
-        sort_order: item.sort_order ?? index,
-      }))
+      const itemsWithSplits: BillItem[] = billItems.map((item, index) => {
+        const itemSplits = allSplits.filter(s => s.bill_item_id === item.id)
+        const participantPaidAmounts: { [participantId: string]: number } = {}
+        itemSplits.forEach(s => {
+          participantPaidAmounts[s.participant_id] = parseFloat(s.paid_amount) || 0
+        })
+
+        return {
+          id: item.id,
+          item_name: item.item_name,
+          unit_price: item.unit_price,
+          discount_ratio: item.discount_ratio,
+          discount_adjustment: item.discount_adjustment,
+          participantIds: splitsMap.get(item.id) || [],
+          participantPaidAmounts,
+          sort_order: item.sort_order ?? index,
+        }
+      })
 
       setItems(itemsWithSplits)
 
@@ -380,68 +388,10 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
         discount_ratio: 1.0,
         discount_adjustment: 0,
         participantIds: [],
+        participantPaidAmounts: {},
         sort_order: maxSortOrder + 1,
       },
     ])
-  }
-
-  const handleAIOCR = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    setIsAiLoading(true)
-    try {
-      // 1. 壓縮圖片
-      const imageCompression = (await import('browser-image-compression')).default
-      const compressedFile = await imageCompression(file, {
-        maxSizeMB: 1,
-        maxWidthOrHeight: 2048,
-        useWebWorker: true
-      })
-
-      // 2. 轉為 Base64
-      const reader = new FileReader()
-      const base64Promise = new Promise<string>((resolve) => {
-        reader.onloadend = () => {
-          const base64String = reader.result as string
-          resolve(base64String.split(',')[1])
-        }
-      })
-      reader.readAsDataURL(compressedFile)
-      const base64Image = await base64Promise
-
-      // 3. 呼叫後端 API
-      const response = await fetch('/api/ocr', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          image: base64Image,
-          fileName: file.name
-        }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'AI 辨識失敗')
-      }
-
-      const data = await response.json()
-
-      if (data && data.items && data.items.length > 0) {
-        importBillData(data)
-        alert(`成功辨識 ${data.items.length} 個品項！`)
-      } else {
-        alert('AI 未能從圖片中辨識出品項。')
-      }
-    } catch (error: any) {
-      console.error('AI OCR Error:', error)
-      alert(`AI 辨識出錯：${error.message}`)
-    } finally {
-      setIsAiLoading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
   }
 
   const updateItem = (id: string, field: keyof BillItem, value: any) => {
@@ -545,15 +495,30 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
     )
   }
 
+  const updateParticipantPaidAmount = (itemId: string, participantId: string, amount: number) => {
+    setItems(
+      items.map((item) => {
+        if (item.id !== itemId) return item
+        return {
+          ...item,
+          participantPaidAmounts: {
+            ...item.participantPaidAmounts,
+            [participantId]: amount
+          }
+        }
+      })
+    )
+  }
+
   const removeItem = (id: string) => {
     setItems(items.filter((item) => item.id !== id))
   }
 
   const calculateParticipantTotals = (): ParticipantTotal[] => {
-    const totals: { [key: string]: { name: string; total: number } } = {}
+    const totals: { [key: string]: { name: string; total: number; paid: number } } = {}
 
     participants.forEach((p) => {
-      totals[p.id] = { name: p.name, total: 0 }
+      totals[p.id] = { name: p.name, total: 0, paid: 0 }
     })
 
     items.forEach((item) => {
@@ -570,6 +535,7 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
       item.participantIds.forEach((participantId) => {
         if (totals[participantId]) {
           totals[participantId].total += shareAmount
+          totals[participantId].paid += item.participantPaidAmounts[participantId] || 0
         }
       })
     })
@@ -797,6 +763,7 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
           discount_adjustment: item.discount_adjustment,
           sort_order: sortIndex,
           participantIds, // 暫時保存，用於後續建立 split_details
+          participantPaidAmounts: item.participantPaidAmounts,
           shareAmount,
         })
       }
@@ -819,6 +786,7 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
             bill_item_id: billItem.id,
             participant_id: participantId,
             share_amount: itemData.shareAmount,
+            paid_amount: itemData.participantPaidAmounts[participantId] || 0,
           }))
           splitsToInsert.push(...splitData)
         })
@@ -1137,6 +1105,7 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
             discount_ratio: item.discount_ratio || 1.0,
             discount_adjustment: i === 0 ? (item.discount_adjustment || 0) : 0,
             participantIds: participantIds,
+            participantPaidAmounts: {},
             sort_order: sortOrderCounter++,
           })
         }
@@ -1705,32 +1674,6 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
                 <div className="flex gap-2">
                   {canEdit && (
                     <>
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        className="hidden"
-                        accept="image/*"
-                        onChange={handleAIOCR}
-                      />
-                      <button
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isAiLoading}
-                        className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50"
-                      >
-                        {isAiLoading ? (
-                          <>
-                            <svg className="animate-spin h-4 w-4 text-indigo-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            辨識中...
-                          </>
-                        ) : (
-                          <>
-                            ✨ AI 辨識發票
-                          </>
-                        )}
-                      </button>
                       <button
                         onClick={addItem}
                         className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
@@ -1879,6 +1822,45 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
                         })}
                       </div>
                       {item.participantIds.length > 0 && (
+                        <div className="mt-4 space-y-2">
+                          <p className="text-sm font-medium text-gray-700">各別已付金額 (如有)：</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {item.participantIds.map((pid) => {
+                              const p = participants.find((part) => part.id === pid)
+                              if (!p) return null
+                              const maxAmount = (item.unit_price * item.discount_ratio + item.discount_adjustment) / item.participantIds.length
+                              return (
+                                <div key={pid} className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                                  <span className="text-xs font-medium text-gray-600 w-12 truncate">{p.name}</span>
+                                  <div className="relative flex-1">
+                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
+                                    <input
+                                      type="number"
+                                      value={item.participantPaidAmounts[pid] || ''}
+                                      onChange={(e) => {
+                                        let val = parseFloat(e.target.value) || 0
+                                        // 限制最大值為該品項總額 (考慮到使用者說最大值是該品項金額，這裡先限制為單人應付額，若要限制為品項總額可改為 itemTotal)
+                                        const itemTotal = item.unit_price * item.discount_ratio + item.discount_adjustment
+                                        if (val > itemTotal) val = itemTotal
+                                        updateParticipantPaidAmount(item.id, pid, val)
+                                      }}
+                                      disabled={!canEdit}
+                                      className="w-full pl-5 pr-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-100"
+                                      placeholder="0"
+                                      min="0"
+                                      step="1"
+                                    />
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                          <p className="text-xs text-gray-500 italic mt-1">
+                            * 已付金額將從該員的應付帳款中扣除。
+                          </p>
+                        </div>
+                      )}
+                      {item.participantIds.length > 0 && (
                         <p className="mt-2 text-sm text-gray-600">
                           每人分擔:{' '}
                           {formatCurrency(
@@ -1920,14 +1902,24 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
                   {participantTotals.map((total) => (
                     <div
                       key={total.participantId}
-                      className="flex justify-between items-center p-3 bg-gray-50 rounded-lg"
+                      className="flex flex-col p-3 bg-gray-50 rounded-lg border border-gray-100"
                     >
-                      <span className="font-medium text-gray-700">
-                        {total.name}
-                      </span>
-                      <span className="text-lg font-bold text-primary-600">
-                        {formatCurrency(total.total)}
-                      </span>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="font-medium text-gray-700">
+                          {total.name}
+                        </span>
+                        <span className="text-sm font-medium text-gray-500">
+                          應付: {formatCurrency(total.total)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-500">
+                          已付: {formatCurrency(total.paid)}
+                        </span>
+                        <span className="text-lg font-bold text-primary-600">
+                          差額: {formatCurrency(Math.max(0, total.total - total.paid))}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>

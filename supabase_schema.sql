@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS public.split_details (
     bill_item_id UUID NOT NULL REFERENCES public.bill_items(id) ON DELETE CASCADE,
     participant_id UUID NOT NULL REFERENCES public.bill_participants(id) ON DELETE CASCADE,
     share_amount NUMERIC(10, 2) NOT NULL,
+    paid_amount NUMERIC(10, 2) DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(bill_item_id, participant_id)
 );
