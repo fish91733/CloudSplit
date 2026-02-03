@@ -14,6 +14,7 @@ interface Bill {
   bill_date: string
   total_amount: number
   checked: boolean
+  payer: string
   created_at: string
   image_url?: string | null
 }
@@ -38,7 +39,7 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState<ViewMode>('month')
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const [showBackToTop, setShowBackToTop] = useState(false)
-  
+
   // 拖拉滾動相關
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -113,7 +114,7 @@ export default function Dashboard() {
         // 構建查詢（只選擇需要的欄位）
         let query = supabase
           .from('bills')
-          .select('id, title, bill_date, total_amount, checked, created_by, created_at')
+          .select('id, title, bill_date, total_amount, checked, created_by, created_at, payer')
           .order('bill_date', { ascending: false })
 
         if (user) {
@@ -184,7 +185,7 @@ export default function Dashboard() {
       // 只選擇需要的欄位以減少資料傳輸
       let query = supabase
         .from('bills')
-        .select('id, title, bill_date, total_amount, checked, created_by, created_at, image_url')
+        .select('id, title, bill_date, total_amount, checked, created_by, created_at, image_url, payer')
         .order('bill_date', { ascending: false })
 
       if (user) {
@@ -252,9 +253,9 @@ export default function Dashboard() {
         .eq('id', billId)
 
       if (error) throw error
-      
+
       // 更新本地狀態
-      setBills(bills.map((bill) => 
+      setBills(bills.map((bill) =>
         bill.id === billId ? { ...bill, checked: !currentChecked } : bill
       ))
     } catch (error) {
@@ -289,13 +290,13 @@ export default function Dashboard() {
           const matchB = b.title.match(/^\s*(\d+)/)
           const numA = matchA ? parseInt(matchA[1], 10) : 999999
           const numB = matchB ? parseInt(matchB[1], 10) : 999999
-          
+
           // 按數字從小到大排序
           if (numA !== numB) return numA - numB
           // 如果數字相同，按標題字母順序排序
           return a.title.localeCompare(b.title, 'zh-TW')
         })
-        
+
         return {
           ...group,
           bills: sortedBills,
@@ -335,13 +336,13 @@ export default function Dashboard() {
           const matchB = b.title.match(/^\s*(\d+)/)
           const numA = matchA ? parseInt(matchA[1], 10) : 999999
           const numB = matchB ? parseInt(matchB[1], 10) : 999999
-          
+
           // 按數字從小到大排序
           if (numA !== numB) return numA - numB
           // 如果數字相同，按標題字母順序排序
           return a.title.localeCompare(b.title, 'zh-TW')
         })
-        
+
         return {
           ...group,
           bills: sortedBills,
@@ -385,7 +386,7 @@ export default function Dashboard() {
               <span className="text-xs sm:text-sm text-slate-600 truncate font-medium">
                 {user
                   ? user?.user_metadata?.full_name ||
-                    (user?.email ? user.email.split('@')[0] : '使用者')
+                  (user?.email ? user.email.split('@')[0] : '使用者')
                   : '訪客模式'}
               </span>
               {user ? (
@@ -424,21 +425,19 @@ export default function Dashboard() {
             <div className="flex gap-1 bg-gray-100 rounded-lg p-1 border border-gray-200">
               <button
                 onClick={() => setViewMode('month')}
-                className={`cursor-pointer px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-                  viewMode === 'month'
-                    ? 'bg-white text-primary-600 shadow-sm border border-primary-200'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
+                className={`cursor-pointer px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${viewMode === 'month'
+                  ? 'bg-white text-primary-600 shadow-sm border border-primary-200'
+                  : 'text-slate-600 hover:text-slate-900'
+                  }`}
               >
                 月份
               </button>
               <button
                 onClick={() => setViewMode('quarter')}
-                className={`cursor-pointer px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-                  viewMode === 'quarter'
-                    ? 'bg-white text-primary-600 shadow-sm border border-primary-200'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
+                className={`cursor-pointer px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${viewMode === 'quarter'
+                  ? 'bg-white text-primary-600 shadow-sm border border-primary-200'
+                  : 'text-slate-600 hover:text-slate-900'
+                  }`}
               >
                 季度
               </button>
@@ -490,7 +489,7 @@ export default function Dashboard() {
         ) : (
           <div className="relative">
             {/* 可滑動的卡片容器 */}
-            <div 
+            <div
               ref={scrollContainerRef}
               className="overflow-x-auto scrollbar-hide pb-4 sm:pb-6 snap-x snap-mandatory -mx-4 sm:mx-0 px-4 sm:px-0 cursor-grab select-none"
               onMouseDown={handleMouseDown}
@@ -501,179 +500,183 @@ export default function Dashboard() {
               <div className="flex gap-4 sm:gap-6 min-w-max">
                 {viewMode === 'month'
                   ? monthGroups.map((group) => (
-                      <div
-                        key={`${group.year}-${group.month}`}
-                        className="motion-card flex-shrink-0 w-[280px] sm:w-80 snap-start p-4 sm:p-6"
-                      >
-                        {/* 月份標題 */}
-                        <div className="mb-4 sm:mb-5 pb-4 border-b border-gray-200">
-                          <h3 className="text-lg sm:text-xl font-bold text-slate-900">
-                            {group.year}年 {getMonthName(group.month)}
-                          </h3>
-                          <p className="text-xs sm:text-sm text-slate-600 mt-1.5 sm:mt-2 font-medium">
-                            {group.bills.length} 筆發票 · 總計 <span className="currency font-semibold text-primary-600">${group.totalAmount.toFixed(0)}</span>
-                          </p>
-                        </div>
+                    <div
+                      key={`${group.year}-${group.month}`}
+                      className="motion-card flex-shrink-0 w-[280px] sm:w-80 snap-start p-4 sm:p-6"
+                    >
+                      {/* 月份標題 */}
+                      <div className="mb-4 sm:mb-5 pb-4 border-b border-gray-200">
+                        <h3 className="text-lg sm:text-xl font-bold text-slate-900">
+                          {group.year}年 {getMonthName(group.month)}
+                        </h3>
+                        <p className="text-xs sm:text-sm text-slate-600 mt-1.5 sm:mt-2 font-medium">
+                          {group.bills.length} 筆發票 · 總計 <span className="currency font-semibold text-primary-600">${group.totalAmount.toFixed(0)}</span>
+                        </p>
+                      </div>
 
-                        {/* 發票列表 */}
-                        <div className="space-y-3 sm:space-y-4 max-h-[60vh] overflow-y-auto">
-                          {group.bills.map((bill) => (
-                              <div
-                                key={bill.id}
-                                className={`motion-card p-3 sm:p-4 cursor-pointer ${
-                                  bill.checked
-                                    ? 'bg-success-50 border-success-200'
-                                    : ''
-                                }`}
-                                onClick={() => handleCardClick(bill.id)}
-                              >
-                                <div className="flex justify-between items-start mb-2 sm:mb-3 gap-2">
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-1.5">
-                                      <h4 className="font-semibold text-slate-900 text-xs sm:text-sm break-words">{bill.title}</h4>
-                                      {bill.image_url && (
-                                        <svg className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                        </svg>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <span className="text-base sm:text-lg font-bold text-primary-600 whitespace-nowrap currency">
-                                    ${bill.total_amount.toFixed(0)}
-                                  </span>
-                                </div>
-                                <p className="text-xs text-slate-600 mb-2 sm:mb-3 font-medium">
-                                  {format(new Date(bill.bill_date), 'MM月dd日', { locale: zhTW })}
-                                </p>
-                                <div className="flex gap-2 mt-2 sm:mt-3">
-                                  {user && (
-                                    <>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          setPendingDeleteId(null) // 點擊檢核按鈕時取消待刪除狀態
-                                          handleToggleChecked(bill.id, bill.checked)
-                                        }}
-                                        className={`cursor-pointer text-xs px-2.5 py-1 rounded transition-colors font-medium border ${
-                                          bill.checked
-                                            ? 'bg-success-200 text-success-800 hover:bg-success-300 border-success-300'
-                                            : 'bg-gray-100 text-slate-700 hover:bg-gray-200 border-gray-200'
-                                        }`}
-                                      >
-                                        {bill.checked ? '✓ 已檢核' : '○ 未檢核'}
-                                      </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          handleDeleteBill(bill.id)
-                                        }}
-                                        className={`cursor-pointer text-xs px-2.5 py-1 rounded transition-colors font-medium border ${
-                                          pendingDeleteId === bill.id
-                                            ? 'bg-error-500 text-white hover:bg-error-600 border-error-600'
-                                            : 'text-error-600 hover:text-error-700 hover:bg-error-50 border-error-200'
-                                        }`}
-                                      >
-                                        {pendingDeleteId === bill.id ? '確認刪除' : '刪除'}
-                                      </button>
-                                    </>
+                      {/* 發票列表 */}
+                      <div className="space-y-3 sm:space-y-4 max-h-[60vh] overflow-y-auto">
+                        {group.bills.map((bill) => (
+                          <div
+                            key={bill.id}
+                            className={`motion-card p-3 sm:p-4 cursor-pointer ${bill.checked
+                              ? 'bg-success-50 border-success-200'
+                              : ''
+                              }`}
+                            onClick={() => handleCardClick(bill.id)}
+                          >
+                            <div className="flex justify-between items-start mb-2 sm:mb-3 gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <h4 className="font-semibold text-slate-900 text-xs sm:text-sm break-words">{bill.title}</h4>
+                                  {bill.payer && (
+                                    <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 font-medium whitespace-nowrap">
+                                      {bill.payer} 付
+                                    </span>
+                                  )}
+                                  {bill.image_url && (
+                                    <svg className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
                                   )}
                                 </div>
                               </div>
-                            ))}
-                        </div>
+                              <span className="text-base sm:text-lg font-bold text-primary-600 whitespace-nowrap currency">
+                                ${bill.total_amount.toFixed(0)}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-600 mb-2 sm:mb-3 font-medium">
+                              {format(new Date(bill.bill_date), 'MM月dd日', { locale: zhTW })}
+                            </p>
+                            <div className="flex gap-2 mt-2 sm:mt-3">
+                              {user && (
+                                <>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setPendingDeleteId(null) // 點擊檢核按鈕時取消待刪除狀態
+                                      handleToggleChecked(bill.id, bill.checked)
+                                    }}
+                                    className={`cursor-pointer text-xs px-2.5 py-1 rounded transition-colors font-medium border ${bill.checked
+                                      ? 'bg-success-200 text-success-800 hover:bg-success-300 border-success-300'
+                                      : 'bg-gray-100 text-slate-700 hover:bg-gray-200 border-gray-200'
+                                      }`}
+                                  >
+                                    {bill.checked ? '✓ 已檢核' : '○ 未檢核'}
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleDeleteBill(bill.id)
+                                    }}
+                                    className={`cursor-pointer text-xs px-2.5 py-1 rounded transition-colors font-medium border ${pendingDeleteId === bill.id
+                                      ? 'bg-error-500 text-white hover:bg-error-600 border-error-600'
+                                      : 'text-error-600 hover:text-error-700 hover:bg-error-50 border-error-200'
+                                      }`}
+                                  >
+                                    {pendingDeleteId === bill.id ? '確認刪除' : '刪除'}
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))
+                    </div>
+                  ))
                   : quarterGroups.map((group) => (
-                      <div
-                        key={`${group.year}-Q${group.quarter}`}
-                        className="motion-card flex-shrink-0 w-[280px] sm:w-80 snap-start p-4 sm:p-6"
-                      >
-                        {/* 季度標題 */}
-                        <div className="mb-4 sm:mb-5 pb-4 border-b border-gray-200">
-                          <h3 className="text-lg sm:text-xl font-bold text-slate-900">
-                            {group.year}年 {getQuarterName(group.quarter)}
-                          </h3>
-                          <p className="text-xs sm:text-sm text-slate-600 mt-1.5 sm:mt-2 font-medium">
-                            {group.bills.length} 筆發票 · 總計 <span className="currency font-semibold text-primary-600">${group.totalAmount.toFixed(0)}</span>
-                          </p>
-                        </div>
+                    <div
+                      key={`${group.year}-Q${group.quarter}`}
+                      className="motion-card flex-shrink-0 w-[280px] sm:w-80 snap-start p-4 sm:p-6"
+                    >
+                      {/* 季度標題 */}
+                      <div className="mb-4 sm:mb-5 pb-4 border-b border-gray-200">
+                        <h3 className="text-lg sm:text-xl font-bold text-slate-900">
+                          {group.year}年 {getQuarterName(group.quarter)}
+                        </h3>
+                        <p className="text-xs sm:text-sm text-slate-600 mt-1.5 sm:mt-2 font-medium">
+                          {group.bills.length} 筆發票 · 總計 <span className="currency font-semibold text-primary-600">${group.totalAmount.toFixed(0)}</span>
+                        </p>
+                      </div>
 
-                        {/* 發票列表 */}
-                        <div className="space-y-3 max-h-[60vh] overflow-y-auto">
-                          {group.bills.map((bill) => (
-                              <div
-                                key={bill.id}
-                                className={`motion-card p-3 sm:p-4 cursor-pointer ${
-                                  bill.checked ? 'bg-success-50 border-success-200' : ''
-                                }`}
-                                onClick={() => handleCardClick(bill.id)}
-                              >
-                                <div className="flex justify-between items-start mb-2">
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-1.5">
-                                      <h4 className="font-semibold text-gray-900 text-sm">{bill.title}</h4>
-                                      {bill.image_url && (
-                                        <svg className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                        </svg>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <span className="text-lg font-bold text-primary-600">
-                                    ${bill.total_amount.toFixed(0)}
-                                  </span>
-                                </div>
-                                <p className="text-xs text-gray-500">
-                                  {format(new Date(bill.bill_date), 'yyyy年MM月dd日', { locale: zhTW })}
-                                </p>
-                                <div className="flex gap-2 mt-2">
-                                  {user && (
-                                    <>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          setPendingDeleteId(null) // 點擊檢核按鈕時取消待刪除狀態
-                                          handleToggleChecked(bill.id, bill.checked)
-                                        }}
-                                        className={`text-xs px-2 py-1 rounded transition-colors ${
-                                          bill.checked
-                                            ? 'bg-green-200 text-green-800 hover:bg-green-300'
-                                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                        }`}
-                                      >
-                                        {bill.checked ? '✓ 已檢核' : '○ 未檢核'}
-                                      </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          handleDeleteBill(bill.id)
-                                        }}
-                                        className={`text-xs px-2 py-1 rounded transition-colors ${
-                                          pendingDeleteId === bill.id
-                                            ? 'bg-red-500 text-white hover:bg-red-600'
-                                            : 'text-red-600 hover:text-red-800 hover:bg-red-50'
-                                        }`}
-                                      >
-                                        {pendingDeleteId === bill.id ? '確認刪除' : '刪除'}
-                                      </button>
-                                    </>
+                      {/* 發票列表 */}
+                      <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+                        {group.bills.map((bill) => (
+                          <div
+                            key={bill.id}
+                            className={`motion-card p-3 sm:p-4 cursor-pointer ${bill.checked ? 'bg-success-50 border-success-200' : ''
+                              }`}
+                            onClick={() => handleCardClick(bill.id)}
+                          >
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <h4 className="font-semibold text-gray-900 text-sm">{bill.title}</h4>
+                                  {bill.payer && (
+                                    <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 font-medium whitespace-nowrap">
+                                      {bill.payer} 付
+                                    </span>
+                                  )}
+                                  {bill.image_url && (
+                                    <svg className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
                                   )}
                                 </div>
                               </div>
-                            ))}
-                        </div>
+                              <span className="text-lg font-bold text-primary-600">
+                                ${bill.total_amount.toFixed(0)}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500">
+                              {format(new Date(bill.bill_date), 'yyyy年MM月dd日', { locale: zhTW })}
+                            </p>
+                            <div className="flex gap-2 mt-2">
+                              {user && (
+                                <>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setPendingDeleteId(null) // 點擊檢核按鈕時取消待刪除狀態
+                                      handleToggleChecked(bill.id, bill.checked)
+                                    }}
+                                    className={`text-xs px-2 py-1 rounded transition-colors ${bill.checked
+                                      ? 'bg-green-200 text-green-800 hover:bg-green-300'
+                                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                      }`}
+                                  >
+                                    {bill.checked ? '✓ 已檢核' : '○ 未檢核'}
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleDeleteBill(bill.id)
+                                    }}
+                                    className={`text-xs px-2 py-1 rounded transition-colors ${pendingDeleteId === bill.id
+                                      ? 'bg-red-500 text-white hover:bg-red-600'
+                                      : 'text-red-600 hover:text-red-800 hover:bg-red-50'
+                                      }`}
+                                  >
+                                    {pendingDeleteId === bill.id ? '確認刪除' : '刪除'}
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    </div>
+                  ))}
               </div>
             </div>
 
             {/* 滑動提示 */}
             {((viewMode === 'month' && monthGroups.length > 1) ||
               (viewMode === 'quarter' && quarterGroups.length > 1)) && (
-              <div className="text-center mt-4 sm:mt-6 text-xs sm:text-sm text-gray-500">
-                ← 左右滑動查看更多 →
-              </div>
-            )}
+                <div className="text-center mt-4 sm:mt-6 text-xs sm:text-sm text-gray-500">
+                  ← 左右滑動查看更多 →
+                </div>
+              )}
           </div>
         )}
       </main>

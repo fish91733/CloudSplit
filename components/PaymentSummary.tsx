@@ -30,6 +30,12 @@ interface GroupedDetail {
   totalAmount: number
 }
 
+interface Settlement {
+  debtor: string
+  creditor: string
+  amount: number
+}
+
 export default function PaymentSummary() {
   const router = useRouter()
   const [summaries, setSummaries] = useState<ParticipantSummary[]>([])
@@ -46,6 +52,7 @@ export default function PaymentSummary() {
   const [paidLoading, setPaidLoading] = useState(false)
   const [modalViewportOffset, setModalViewportOffset] = useState(64)
   const [isModalBackdropMouseDown, setIsModalBackdropMouseDown] = useState(false)
+  const [settlements, setSettlements] = useState<Settlement[]>([])
 
   const loadPaymentSummary = useCallback(async () => {
     let timeoutId: NodeJS.Timeout | null = null
@@ -66,11 +73,11 @@ export default function PaymentSummary() {
       const { data: splitDetails, error: splitError } = await supabase
         .from('split_details')
         .select('id, share_amount, participant_id, bill_item_id')
-      
-      console.log('PaymentSummary: Split details query completed', { 
-        hasData: !!splitDetails, 
+
+      console.log('PaymentSummary: Split details query completed', {
+        hasData: !!splitDetails,
         dataLength: splitDetails?.length || 0,
-        hasError: !!splitError 
+        hasError: !!splitError
       })
 
       if (timeoutId) clearTimeout(timeoutId)
@@ -94,14 +101,14 @@ export default function PaymentSummary() {
       // 獲取所有相關的 bill_item_id 和 participant_id
       // 過濾掉 null、undefined 和空字串，並驗證 UUID 格式
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-      
+
       const itemIds = [...new Set(splitDetails.map((s) => s.bill_item_id))]
         .filter((id): id is string => {
           if (!id || typeof id !== 'string' || id.trim().length === 0) return false
           // 驗證 UUID 格式
           return uuidRegex.test(id.trim())
         })
-      
+
       const participantIds = [...new Set(splitDetails.map((s) => s.participant_id))]
         .filter((id): id is string => {
           if (!id || typeof id !== 'string' || id.trim().length === 0) return false
@@ -118,8 +125,8 @@ export default function PaymentSummary() {
         return
       }
 
-      console.log('PaymentSummary: Querying with valid IDs', { 
-        itemIdsCount: itemIds.length, 
+      console.log('PaymentSummary: Querying with valid IDs', {
+        itemIdsCount: itemIds.length,
         participantIdsCount: participantIds.length,
         itemIdsSample: itemIds.slice(0, 5)
       })
@@ -139,7 +146,7 @@ export default function PaymentSummary() {
             .from(table)
             .select(selectFields)
             .in(idField, batch)
-          
+
           if (error) {
             // 嘗試直接訪問錯誤對象的所有可能屬性
             const errorInfo = {
@@ -154,7 +161,7 @@ export default function PaymentSummary() {
             console.error(`${table} query error (batch ${i / batchSize + 1}):`, errorInfo)
             throw new Error(`查詢${table}失敗：${error.message || error.code || error.hint || 'Bad Request'}`)
           }
-          
+
           if (data) {
             results.push(...data as T[])
           }
@@ -165,18 +172,18 @@ export default function PaymentSummary() {
       // 並行查詢品項和參與者（使用分批查詢）
       let items: any[] = []
       let participants: any[] = []
-      
+
       try {
         const [itemsResult, participantsResult] = await Promise.all([
           itemIds.length > 0
             ? batchQuery('bill_items', 'id, item_name, bill_id', 'id', itemIds)
-                .then(data => ({ data, error: null }))
-                .catch(error => ({ data: null, error }))
+              .then(data => ({ data, error: null }))
+              .catch(error => ({ data: null, error }))
             : Promise.resolve({ data: [], error: null }),
           participantIds.length > 0
             ? batchQuery('bill_participants', 'id, name', 'id', participantIds)
-                .then(data => ({ data, error: null }))
-                .catch(error => ({ data: null, error }))
+              .then(data => ({ data, error: null }))
+              .catch(error => ({ data: null, error }))
             : Promise.resolve({ data: [], error: null }),
         ])
 
@@ -201,11 +208,11 @@ export default function PaymentSummary() {
 
       // 查詢 bills（使用分批查詢）
       const billIds = [...new Set(items.map((i: any) => i.bill_id))]
-      
+
       let bills: any[] = []
       if (billIds.length > 0) {
         try {
-          bills = await batchQuery('bills', 'id, title, bill_date', 'id', billIds)
+          bills = await batchQuery('bills', 'id, title, bill_date, payer', 'id', billIds)
         } catch (error: any) {
           console.error('Bills query error:', error)
           throw new Error(`查詢發票失敗：${error?.message || '未知錯誤'}`)
@@ -271,10 +278,10 @@ export default function PaymentSummary() {
           }
           return Infinity
         }
-        
+
         const numA = getFirstNumber(a.participantName)
         const numB = getFirstNumber(b.participantName)
-        
+
         // 如果都有數字，按數字排序
         if (numA !== Infinity && numB !== Infinity) {
           const diff = numA - numB
@@ -290,6 +297,50 @@ export default function PaymentSummary() {
 
       setSummaries(summariesArray)
       setTotalAmount(summariesArray.reduce((sum, s) => sum + s.totalAmount, 0))
+
+      // 計算結算 (誰欠誰多少)
+      const rawSettlements: Record<string, Record<string, number>> = {}
+      splitDetails.forEach((split) => {
+        const participant = participantsMap.get(split.participant_id)
+        if (!participant) return
+        const item = itemsMap.get(split.bill_item_id)
+        if (!item) return
+        const bill = billsMap.get(item.bill_id)
+        if (!bill) return
+
+        const shareAmount = parseFloat(split.share_amount.toString())
+        const debtor = participant.name
+        const creditor = bill.payer
+
+        if (creditor && debtor !== creditor) {
+          if (!rawSettlements[debtor]) rawSettlements[debtor] = {}
+          rawSettlements[debtor][creditor] = (rawSettlements[debtor][creditor] || 0) + shareAmount
+        }
+      })
+
+      // 抵銷債務
+      const pairs = new Map<string, number>()
+      Object.entries(rawSettlements).forEach(([debtor, creditors]) => {
+        Object.entries(creditors).forEach(([creditor, amount]) => {
+          const isSorted = debtor < creditor
+          const key = isSorted ? `${debtor}:::${creditor}` : `${creditor}:::${debtor}`
+          const sign = isSorted ? 1 : -1
+          pairs.set(key, (pairs.get(key) || 0) + (amount * sign))
+        })
+      })
+
+      const netSettlements: Settlement[] = []
+      pairs.forEach((amount, key) => {
+        if (Math.abs(amount) < 0.01) return
+        const [p1, p2] = key.split(':::')
+        if (amount > 0) {
+          netSettlements.push({ debtor: p1, creditor: p2, amount })
+        } else {
+          netSettlements.push({ debtor: p2, creditor: p1, amount: -amount })
+        }
+      })
+      setSettlements(netSettlements.sort((a, b) => b.amount - a.amount))
+
       setError(null)
     } catch (error: any) {
       if (timeoutId) clearTimeout(timeoutId)
@@ -307,19 +358,19 @@ export default function PaymentSummary() {
   useEffect(() => {
     console.log('PaymentSummary: Starting loadPaymentSummary')
     loadPaymentSummary()
-    
+
     // 載入用戶狀態
     const loadUser = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       setUser(session?.user || null)
     }
     loadUser()
-    
+
     // 監聽 auth 狀態變化
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
     })
-    
+
     return () => {
       subscription.unsubscribe()
     }
@@ -521,7 +572,7 @@ export default function PaymentSummary() {
           {/* 圖表區域 */}
           <div className="mb-5 sm:mb-6">
             <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-4 sm:mb-5">每人應繳金額</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
               {summaries.map((summary) => {
                 const owedWidth = Math.min(
                   maxAmount > 0 ? (summary.totalAmount / maxAmount) * 100 : 0,
@@ -539,11 +590,10 @@ export default function PaymentSummary() {
                 return (
                   <div
                     key={summary.participantName}
-                    className={`motion-card cursor-pointer rounded-xl border transition-all duration-200 shadow-sm hover:shadow-md relative overflow-hidden ${
-                      isSelected
-                        ? 'ring-2 ring-primary-500 border-primary-300'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
+                    className={`motion-card cursor-pointer rounded-xl border transition-all duration-200 shadow-sm hover:shadow-md relative overflow-hidden ${isSelected
+                      ? 'ring-2 ring-primary-500 border-primary-300'
+                      : 'border-gray-200 hover:border-gray-300'
+                      }`}
                     onClick={(e) => handleParticipantSelect(e, summary.participantName)}
                   >
                     {/* 進度條背景 */}
@@ -557,31 +607,27 @@ export default function PaymentSummary() {
                       style={{ left: `${isFullyPaid ? 100 : paidRatio * 100}%` }}
                     />
                     {/* 內容區域 */}
-                    <div className="relative z-10 p-4 sm:p-5">
+                    <div className="relative z-10 p-3 sm:p-4">
                       {/* 標題區域 */}
                       <div className="flex items-center justify-between mb-4 gap-3">
                         <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center ${
-                            paidRatio >= 0.5 ? 'bg-white/20 backdrop-blur-sm' : 'bg-primary-100'
-                          }`}>
-                            <span className={`text-lg sm:text-xl font-bold ${
-                              paidRatio >= 0.5 ? 'text-white' : 'text-primary-600'
+                          <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center ${paidRatio >= 0.5 ? 'bg-white/20 backdrop-blur-sm' : 'bg-primary-100'
                             }`}>
+                            <span className={`text-base sm:text-lg font-bold ${paidRatio >= 0.5 ? 'text-white' : 'text-primary-600'
+                              }`}>
                               {summary.participantName.charAt(0).toUpperCase()}
                             </span>
                           </div>
                           <div>
-                            <div className={`font-bold text-sm sm:text-base ${
-                              paidRatio >= 0.5 ? 'text-white drop-shadow-sm' : 'text-slate-900'
-                            }`}>
+                            <div className={`font-bold text-sm sm:text-base ${paidRatio >= 0.5 ? 'text-white drop-shadow-sm' : 'text-slate-900'
+                              }`}>
                               {summary.participantName}
                             </div>
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className={`text-lg sm:text-xl font-bold whitespace-nowrap currency ${
-                            paidRatio >= 0.5 ? 'text-white drop-shadow-md' : 'text-primary-600'
-                          }`}>
+                          <div className={`text-base sm:text-lg font-bold whitespace-nowrap currency ${paidRatio >= 0.5 ? 'text-white drop-shadow-md' : 'text-primary-600'
+                            }`}>
                             ${summary.totalAmount.toFixed(2)}
                           </div>
                         </div>
@@ -589,7 +635,7 @@ export default function PaymentSummary() {
 
                       {/* 已繳金額區域 */}
                       <div
-                        className="rounded-lg border border-gray-200/50 bg-white/80 backdrop-blur-sm p-3 sm:p-4 space-y-3"
+                        className="rounded-lg border border-gray-200/50 bg-white/80 backdrop-blur-sm p-2.5 sm:p-3 space-y-2.5"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <div className="flex items-center justify-between">
@@ -619,11 +665,10 @@ export default function PaymentSummary() {
                               value={paidAmounts[summary.participantName] ?? ''}
                               onChange={(e) => handlePaidChange(summary.participantName, e.target.value)}
                               disabled={!user}
-                              className={`w-full rounded-lg border py-2.5 pl-7 pr-3 text-sm tabular-nums transition-colors ${
-                                user
-                                  ? 'border-gray-300 bg-white text-slate-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100'
-                                  : 'border-gray-200 bg-gray-50 text-slate-500 cursor-not-allowed'
-                              }`}
+                              className={`w-full rounded-lg border py-2 pl-7 pr-2 text-sm tabular-nums transition-colors ${user
+                                ? 'border-gray-300 bg-white text-slate-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100'
+                                : 'border-gray-200 bg-gray-50 text-slate-500 cursor-not-allowed'
+                                }`}
                               placeholder="0.00"
                               onBlur={() => handlePaidBlur(summary.participantName)}
                             />
@@ -642,6 +687,55 @@ export default function PaymentSummary() {
               })}
             </div>
           </div>
+
+          {/* 結算建議區域 */}
+          {settlements.length > 0 && (
+            <div className="mb-5 sm:mb-6">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-4 sm:mb-5">債務結算建議</h3>
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">債務人 (誰付)</th>
+                      <th className="px-6 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider"></th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">債權人 (給誰)</th>
+                      <th className="px-6 py-3 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">結算金額</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {settlements.map((s, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center">
+                              <span className="text-sm font-bold text-red-600">{s.debtor.charAt(0).toUpperCase()}</span>
+                            </div>
+                            <span className="font-medium text-slate-900">{s.debtor}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center text-slate-400">
+                          <svg className="w-5 h-5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                          </svg>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-success-100 flex items-center justify-center">
+                              <span className="text-sm font-bold text-success-600">{s.creditor.charAt(0).toUpperCase()}</span>
+                            </div>
+                            <span className="font-medium text-slate-900">{s.creditor}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                          <span className="text-lg font-bold text-primary-600 currency">${s.amount.toFixed(2)}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -649,7 +743,7 @@ export default function PaymentSummary() {
       {isParticipantDetailModalOpen && selectedSummary && (() => {
         // 按發票分組
         const groupedDetails = new Map<string, GroupedDetail>()
-        
+
         selectedSummary.details.forEach((detail) => {
           if (!groupedDetails.has(detail.billId)) {
             groupedDetails.set(detail.billId, {
@@ -743,7 +837,7 @@ export default function PaymentSummary() {
                           </div>
                         </div>
                       </div>
-                      
+
                       {/* 品項列表 */}
                       <div className="bg-white">
                         <table className="min-w-full border-collapse">
@@ -814,7 +908,7 @@ export default function PaymentSummary() {
                       </div>
                     </div>
                   ))}
-                  
+
                   {/* 總計 */}
                   <div className="bg-primary-50 border-2 border-primary-200 rounded-lg p-4 sm:p-5">
                     <div className="flex justify-between items-center">
@@ -830,7 +924,7 @@ export default function PaymentSummary() {
           </div>
         )
       })()}
-      
+
       {/* 發票明細模態框 */}
       <BillDetailModal
         isOpen={isBillModalOpen}

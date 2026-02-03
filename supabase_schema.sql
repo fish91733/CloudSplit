@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS public.bills (
     created_by UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     total_amount NUMERIC(10, 2) DEFAULT 0,
     checked BOOLEAN DEFAULT false NOT NULL,
+    payer TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
