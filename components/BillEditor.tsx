@@ -38,13 +38,14 @@ interface BillEditorProps {
   billId?: string
   isModal?: boolean
   onClose?: () => void
+  onSave?: (updatedBill: { id: string; title: string; total_amount: number; checked: boolean; payer: string }) => void
 }
 
 export interface BillEditorRef {
   isDirty: boolean
 }
 
-const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal = false, onClose }, ref) => {
+const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal = false, onClose, onSave }, ref) => {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [initialData, setInitialData] = useState<string>('') // 用於檢測是否有未儲存的變更
@@ -395,8 +396,8 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
   }
 
   const updateItem = (id: string, field: keyof BillItem, value: any) => {
-    setItems(
-      items.map((item) =>
+    setItems(prevItems =>
+      prevItems.map((item) =>
         item.id === id ? { ...item, [field]: value } : item
       )
     )
@@ -466,9 +467,8 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
   const handleDiscountAdjustmentBlur = (itemId: string, currentValue: string) => {
     const numValue = parseFloat(currentValue)
     if (isNaN(numValue) || currentValue === '' || currentValue === '-') {
-      // 如果無效，恢復為預設值
-      const item = items.find(i => i.id === itemId)
-      updateItem(itemId, 'discount_adjustment', item?.discount_adjustment || 0)
+      // 如果清空或無效，設為 0（不恢復原值）
+      updateItem(itemId, 'discount_adjustment', 0)
     } else {
       updateItem(itemId, 'discount_adjustment', numValue)
     }
@@ -481,8 +481,8 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
   }
 
   const toggleItemParticipant = (itemId: string, participantId: string) => {
-    setItems(
-      items.map((item) => {
+    setItems(prevItems =>
+      prevItems.map((item) => {
         if (item.id !== itemId) return item
         const isSelected = item.participantIds.includes(participantId)
         return {
@@ -496,8 +496,8 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
   }
 
   const updateParticipantPaidAmount = (itemId: string, participantId: string, amount: number) => {
-    setItems(
-      items.map((item) => {
+    setItems(prevItems =>
+      prevItems.map((item) => {
         if (item.id !== itemId) return item
         return {
           ...item,
@@ -511,7 +511,7 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
   }
 
   const removeItem = (id: string) => {
-    setItems(items.filter((item) => item.id !== id))
+    setItems(prevItems => prevItems.filter((item) => item.id !== id))
   }
 
   const calculateParticipantTotals = (): ParticipantTotal[] => {
@@ -744,14 +744,16 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
           .filter((id): id is string => id !== null)
 
         const shareCount = participantIds.length
-        if (shareCount === 0) continue
 
-        const shareAmount = calculateShareAmount(
-          item.unit_price,
-          shareCount,
-          item.discount_ratio,
-          item.discount_adjustment
-        )
+        // 計算分攤金額（如果沒有分擔人，設為 0）
+        const shareAmount = shareCount > 0
+          ? calculateShareAmount(
+            item.unit_price,
+            shareCount,
+            item.discount_ratio,
+            item.discount_adjustment
+          )
+          : 0
 
         totalAmount += item.unit_price * item.discount_ratio + item.discount_adjustment
 
@@ -773,7 +775,7 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
         const { data: insertedItems, error: itemsError } = await supabase
           .from('bill_items')
           .insert(
-            itemsToInsert.map(({ participantIds, shareAmount, ...item }) => item)
+            itemsToInsert.map(({ participantIds, shareAmount, participantPaidAmounts, ...item }) => item)
           )
           .select()
 
@@ -807,11 +809,19 @@ const BillEditor = forwardRef<BillEditorRef, BillEditorProps>(({ billId, isModal
         .update({ total_amount: totalAmount })
         .eq('id', currentBillId)
 
-      // 如果是 modal 模式，關閉 modal 並刷新列表
+      // 如果是 modal 模式，關閉 modal 並通知 Dashboard 更新
       if (isModal && onClose) {
+        // 使用 callback 通知 Dashboard 更新特定發票，避免整頁刷新
+        if (onSave && currentBillId) {
+          onSave({
+            id: currentBillId,
+            title: title.trim(),
+            total_amount: totalAmount,
+            checked,
+            payer
+          })
+        }
         onClose()
-        // 觸發頁面刷新以更新列表
-        window.location.reload()
       } else {
         router.push('/')
         router.refresh()

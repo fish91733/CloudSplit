@@ -7,9 +7,10 @@ interface BillDetailModalProps {
   billId: string | null
   isOpen: boolean
   onClose: () => void
+  onSave?: (updatedBill: { id: string; title: string; total_amount: number; checked: boolean; payer: string }) => void
 }
 
-export default function BillDetailModal({ billId, isOpen, onClose }: BillDetailModalProps) {
+export default function BillDetailModal({ billId, isOpen, onClose, onSave }: BillDetailModalProps) {
   const [currentBillId, setCurrentBillId] = useState<string | null>(null)
   const [showBackToTop, setShowBackToTop] = useState(false)
   const [isBackdropMouseDown, setIsBackdropMouseDown] = useState(false)
@@ -113,17 +114,18 @@ export default function BillDetailModal({ billId, isOpen, onClose }: BillDetailM
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Content - 這個 div 負責滾動 */}
-        <div 
+        <div
           ref={modalContentRef}
           className="overflow-y-auto flex-1"
         >
           {currentBillId ? (
-            <BillEditor 
+            <BillEditor
               ref={billEditorRef}
-              key={currentBillId} 
-              billId={currentBillId} 
-              isModal={true} 
-              onClose={onClose} 
+              key={currentBillId}
+              billId={currentBillId}
+              isModal={true}
+              onClose={onClose}
+              onSave={onSave}
             />
           ) : (
             <div className="h-full flex items-center justify-center">

@@ -36,7 +36,9 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null)
   const [selectedBillId, setSelectedBillId] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  // viewMode 狀態 (預設 'month'，客戶端掛載後從 localStorage 讀取)
   const [viewMode, setViewMode] = useState<ViewMode>('month')
+  const [isViewModeLoaded, setIsViewModeLoaded] = useState(false)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const [showBackToTop, setShowBackToTop] = useState(false)
 
@@ -159,7 +161,59 @@ export default function Dashboard() {
     }
   }, [])
 
-  // 監聽滾動，顯示/隱藏回到頂端按鈕
+  // 當 viewMode 變更時儲存到 localStorage（只在初次載入完成後才儲存）
+  useEffect(() => {
+    if (isViewModeLoaded) {
+      localStorage.setItem('dashboard_viewMode', viewMode)
+    }
+  }, [viewMode, isViewModeLoaded])
+
+  // 客戶端掛載後從 localStorage 讀取 viewMode
+  useEffect(() => {
+    const saved = localStorage.getItem('dashboard_viewMode')
+    if (saved === 'month' || saved === 'quarter') {
+      setViewMode(saved)
+    }
+    setIsViewModeLoaded(true)
+  }, [])
+
+  // 儲存捲動位置到 localStorage（依據 viewMode 分開存儲）
+  const saveScrollPosition = useCallback(() => {
+    if (scrollContainerRef.current) {
+      localStorage.setItem(`dashboard_scrollLeft_${viewMode}`, String(scrollContainerRef.current.scrollLeft))
+    }
+  }, [viewMode])
+
+  // 恢復捲動位置
+  useEffect(() => {
+    // 當資料載入完成且 viewMode 已從 localStorage 載入後恢復捲動位置
+    if (!loading && bills.length > 0 && isViewModeLoaded && scrollContainerRef.current) {
+      const savedScrollLeft = localStorage.getItem(`dashboard_scrollLeft_${viewMode}`)
+      if (savedScrollLeft) {
+        // 使用 requestAnimationFrame 確保 DOM 已渲染
+        requestAnimationFrame(() => {
+          if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollLeft = parseInt(savedScrollLeft, 10)
+          }
+        })
+      }
+    }
+  }, [loading, bills.length, viewMode, isViewModeLoaded])
+
+  // 監聽橫向滾動以儲存位置
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const handleHorizontalScroll = () => {
+      saveScrollPosition()
+    }
+
+    container.addEventListener('scroll', handleHorizontalScroll)
+    return () => container.removeEventListener('scroll', handleHorizontalScroll)
+  }, [saveScrollPosition])
+
+  // 監聯滾動，顯示/隱藏回到頂端按鈕
   useEffect(() => {
     const handleScroll = () => {
       setShowBackToTop(window.scrollY > 300)
@@ -263,6 +317,23 @@ export default function Dashboard() {
       alert('更新檢核狀態失敗')
     }
   }
+
+  // 處理發票儲存後的局部更新（避免整頁刷新）
+  const handleBillSave = useCallback((updatedBill: {
+    id: string
+    title: string
+    total_amount: number
+    checked: boolean
+    payer: string
+  }) => {
+    setBills(prevBills =>
+      prevBills.map(bill =>
+        bill.id === updatedBill.id
+          ? { ...bill, ...updatedBill }
+          : bill
+      )
+    )
+  }, [])
 
   // 按月份分組發票
   const monthGroups = useMemo(() => {
@@ -689,6 +760,7 @@ export default function Dashboard() {
           setIsModalOpen(false)
           setSelectedBillId(null)
         }}
+        onSave={handleBillSave}
       />
 
       {/* 回到頂端按鈕 */}
