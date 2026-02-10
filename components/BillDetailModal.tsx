@@ -64,12 +64,10 @@ export default function BillDetailModal({ billId, isOpen, onClose, onSave }: Bil
 
     if (isOpen) {
       document.addEventListener('keydown', handleEscape)
-      document.body.style.overflow = 'hidden'
     }
 
     return () => {
       document.removeEventListener('keydown', handleEscape)
-      document.body.style.overflow = 'unset'
     }
   }, [isOpen, onClose])
 
@@ -105,18 +103,18 @@ export default function BillDetailModal({ billId, isOpen, onClose, onSave }: Bil
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black bg-opacity-50"
+      className="fixed inset-0 z-[60] flex items-start justify-center pt-[2vh] bg-black bg-opacity-50"
       onMouseDown={handleBackdropMouseDown}
       onMouseUp={handleBackdropMouseUp}
     >
       <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col relative"
+        className="bg-white rounded-lg shadow-xl w-[98vw] h-[96vh] overflow-hidden flex flex-col relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Content - 這個 div 負責滾動 */}
         <div
           ref={modalContentRef}
-          className="overflow-y-auto flex-1"
+          className="overflow-y-scroll flex-1"
         >
           {currentBillId ? (
             <BillEditor

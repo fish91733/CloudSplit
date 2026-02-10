@@ -487,12 +487,10 @@ export default function PaymentSummary() {
 
     if (isParticipantDetailModalOpen) {
       document.addEventListener('keydown', handleEscape)
-      document.body.style.overflow = 'hidden'
     }
 
     return () => {
       document.removeEventListener('keydown', handleEscape)
-      document.body.style.overflow = 'unset'
     }
   }, [isParticipantDetailModalOpen])
 
