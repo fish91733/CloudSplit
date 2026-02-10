@@ -1,0 +1,30 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Pixel Art Style Coin -->
+  <!-- Outer Border -->
+  <rect x="8" y="2" width="16" height="2" fill="#8B4513"/>
+  <rect x="8" y="28" width="16" height="2" fill="#8B4513"/>
+  <rect x="2" y="8" width="2" height="16" fill="#8B4513"/>
+  <rect x="28" y="8" width="2" height="16" fill="#8B4513"/>
+  <rect x="4" y="4" width="4" height="4" fill="#8B4513"/>
+  <rect x="24" y="4" width="4" height="4" fill="#8B4513"/>
+  <rect x="4" y="24" width="4" height="4" fill="#8B4513"/>
+  <rect x="24" y="24" width="4" height="4" fill="#8B4513"/>
+  
+  <!-- Coin Body (Gold) -->
+  <rect x="8" y="4" width="16" height="24" fill="#FFD700"/>
+  <rect x="4" y="8" width="24" height="16" fill="#FFD700"/>
+  <rect x="6" y="6" width="20" height="20" fill="#FFD700"/>
+  
+  <!-- Inner Detail (Shadow) -->
+  <rect x="18" y="10" width="6" height="12" fill="#DAA520"/>
+  <rect x="10" y="18" width="8" height="4" fill="#DAA520"/>
+  
+  <!-- Dollar Symbol (Pixelated) -->
+  <rect x="14" y="8" width="4" height="16" fill="#8B4513"/>
+  <rect x="12" y="10" width="8" height="2" fill="#8B4513"/>
+  <rect x="10" y="12" width="4" height="2" fill="#8B4513"/>
+  <rect x="12" y="14" width="8" height="2" fill="#8B4513"/>
+  <rect x="18" y="16" width="4" height="2" fill="#8B4513"/>
+  <rect x="12" y="18" width="8" height="2" fill="#8B4513"/>
+  <rect x="14" y="6" width="4" height="20" fill="#8B4513"/>
+</svg>
