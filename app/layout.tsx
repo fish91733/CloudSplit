@@ -4,6 +4,9 @@ import './globals.css'
 export const metadata: Metadata = {
   title: '還錢好過年',
   description: '記錄發票明細並自動計算多人分擔金額',
+  icons: {
+    icon: '/favicon.svg',
+  },
 }
 
 export default function RootLayout({
